@@ -144,7 +144,8 @@
       margin-bottom: 14px;
     }
 
-    input[type="text"] {
+    input[type="text"],
+    input[type="number"] {
       flex: 1;
       background: var(--bg);
       border: 1px solid var(--border);
@@ -155,8 +156,25 @@
       outline: none;
     }
 
-    input[type="text"]:focus {
+    input[type="text"]:focus,
+    input[type="number"]:focus {
       border-color: var(--accent);
+    }
+
+    .goal-setting {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .goal-setting label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      min-width: 54px;
     }
 
     .btn-primary {
@@ -455,6 +473,7 @@
         <h1>Flip 7 Scorekeeper</h1>
       </div>
       <div class="header-actions" id="gameHeaderActions">
+        <button class="btn-ghost" onclick="editGoal()" id="goalBtn" title="Change target score">Goal: <span id="goalBadge">200</span></button>
         <button class="btn-ghost" onclick="undoLastRound()" id="undoBtn" title="Undo last round">↩ Undo</button>
         <button class="btn-danger-ghost" onclick="resetGame()">New Game</button>
       </div>
@@ -463,6 +482,10 @@
     <!-- SETUP VIEW -->
     <div id="setupView" class="card">
       <div class="section-title">Add Players (2–12)</div>
+      <div class="goal-setting">
+        <label for="goalInput">Goal</label>
+        <input type="number" id="goalInput" min="25" step="5" value="200" inputmode="numeric" oninput="updateGoalFromInput()" />
+      </div>
       <div class="input-row">
         <input type="text" id="playerNameInput" placeholder="Enter player name..." maxlength="18" onkeypress="if(event.key==='Enter') addPlayer()" />
         <button class="btn-primary" onclick="addPlayer()">Add</button>
@@ -478,7 +501,7 @@
       <!-- STANDINGS -->
       <div class="card">
         <div class="section-title">
-          <span>Standings (Goal: 200)</span>
+          <span id="standingsGoalLabel">Standings (Goal: 200)</span>
           <span id="roundLabel">Round 1</span>
         </div>
         <div class="standings-list" id="standingsList"></div>
@@ -509,7 +532,7 @@
 
         <div class="action-row">
           <button class="btn-bust" onclick="recordBust()">💥 Bust (0)</button>
-          <button class="btn-success" onclick="saveAndNext()">Save & Next →</button>
+          <button class="btn-success" id="saveRoundBtn" onclick="saveAndNext()">Save & Next →</button>
         </div>
       </div>
 
@@ -526,10 +549,11 @@
 
   <script>
     const STORAGE_KEY = 'flip7_scorekeeper_state_v1';
-    const TARGET_SCORE = 200;
+    const DEFAULT_TARGET_SCORE = 200;
 
     let state = {
       started: false,
+      goal: DEFAULT_TARGET_SCORE,
       players: [], // { id, name, score }
       dealerIndex: 0,
       round: 1,
@@ -543,11 +567,51 @@
     let selectedFlatMods = new Set();
     let hasX2 = false;
 
+    function normalizeGoal(value) {
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed < 25) {
+        return DEFAULT_TARGET_SCORE;
+      }
+      return parsed;
+    }
+
+    function refreshGoalUI() {
+      const goalInput = document.getElementById('goalInput');
+      const startGameBtn = document.getElementById('startGameBtn');
+      const goalBadge = document.getElementById('goalBadge');
+      const standingsGoalLabel = document.getElementById('standingsGoalLabel');
+
+      if (goalInput) goalInput.value = state.goal;
+      if (startGameBtn) startGameBtn.textContent = `Start Game (Target: ${state.goal} pts)`;
+      if (goalBadge) goalBadge.textContent = state.goal;
+      if (standingsGoalLabel) standingsGoalLabel.textContent = `Standings (Goal: ${state.goal})`;
+    }
+
+    function updateGoalFromInput() {
+      const input = document.getElementById('goalInput');
+      if (!input) return;
+      state.goal = normalizeGoal(input.value);
+      refreshGoalUI();
+    }
+
+    function editGoal() {
+      const nextGoal = prompt(`Set a custom target score (minimum 25). Current goal: ${state.goal}.`, state.goal);
+      if (nextGoal === null) return;
+      state.goal = normalizeGoal(nextGoal);
+      saveState();
+      render();
+    }
+
     function loadState() {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          state = JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          state = {
+            ...state,
+            ...parsed,
+            goal: normalizeGoal(parsed?.goal ?? DEFAULT_TARGET_SCORE)
+          };
         }
       } catch (e) {
         console.error('Failed to load state', e);
@@ -596,10 +660,12 @@
       });
       document.getElementById('startGameBtn').disabled = state.players.length < 2;
       document.getElementById('startGameBtn').style.opacity = state.players.length < 2 ? '0.5' : '1';
+      refreshGoalUI();
     }
 
     function startGame() {
       if (state.players.length < 2) return;
+      state.goal = normalizeGoal(document.getElementById('goalInput').value);
       state.started = true;
       state.round = 1;
       state.dealerIndex = 0;
@@ -773,10 +839,12 @@
       // Sort copy for display while keeping seat order for dealer/tabs
       const sorted = [...state.players].sort((a, b) => b.score - a.score);
       const topScore = sorted.length ? sorted[0].score : 0;
+      const goal = state.goal;
+      const endgameThreshold = Math.max(25, Math.round(goal * 0.85));
 
       // Winner banner check
       const banner = document.getElementById('winnerBanner');
-      if (topScore >= TARGET_SCORE) {
+      if (topScore >= goal) {
         const leaders = sorted.filter(p => p.score === topScore).map(p => escapeHtml(p.name)).join(' & ');
         banner.classList.remove('hidden');
         banner.innerHTML = `
@@ -791,9 +859,9 @@
         const seatIndex = state.players.findIndex(sp => sp.id === p.id);
         const isDealer = seatIndex === state.dealerIndex;
         const isActive = seatIndex === state.activePlayerIndex;
-        const isEndgame = p.score >= 170 && p.score < TARGET_SCORE;
+        const isEndgame = p.score >= endgameThreshold && p.score < goal;
         const pending = state.pendingRound[p.id];
-        const pct = Math.min(100, Math.round((p.score / TARGET_SCORE) * 100));
+        const pct = Math.min(100, Math.round((p.score / goal) * 100));
 
         const item = document.createElement('div');
         item.className = `standing-item ${isActive ? 'active-player' : ''} ${isEndgame ? 'endgame' : ''}`;
@@ -803,7 +871,7 @@
             <div class="player-meta">
               <span>${escapeHtml(p.name)}</span>
               ${isDealer ? '<span class="badge badge-dealer">Dealer</span>' : ''}
-              ${isEndgame ? '<span class="badge badge-danger">170+ Zone</span>' : ''}
+              ${isEndgame ? `<span class="badge badge-danger">${endgameThreshold}+</span>` : ''}
               ${pending !== undefined ? `<span class="badge badge-done">+${pending.points}</span>` : ''}
             </div>
             <div class="score-display">${p.score}</div>
@@ -816,9 +884,15 @@
       });
     }
 
+    function getSaveButtonText() {
+      const remaining = state.players.filter(p => state.pendingRound[p.id] === undefined).length;
+      return remaining <= 1 ? 'Save & End Round →' : 'Save & Next →';
+    }
+
     function renderCalculator() {
       document.getElementById('roundLabel').textContent = `Round ${state.round}`;
       document.getElementById('calcRoundNum').textContent = state.round;
+      document.getElementById('saveRoundBtn').textContent = getSaveButtonText();
 
       // Player tabs
       const tabs = document.getElementById('playerTabs');
@@ -900,6 +974,8 @@
     }
 
     function render() {
+      refreshGoalUI();
+
       const setupView = document.getElementById('setupView');
       const gameView = document.getElementById('gameView');
       const headerActions = document.getElementById('gameHeaderActions');

@@ -6,7 +6,8 @@ A fast, mobile-first Progressive Web App (PWA) for tracking scores in the **Flip
 - **Tap-to-Build Hand Calculator:** Tap the number cards (`0–12`) and modifiers (`+2`, `+4`, `+6`, `+8`, `+10`, `×2`) each player holds at the end of a round.
 - **Official Flip 7 Math:** Automatically applies the `×2` multiplier *only* to number cards (leaving flat modifiers untouched) and awards the **+15 Flip 7 bonus** when a player collects 7 unique number cards.
 - **Fast Table Flow:** One-tap **Bust (`0`)** button, **Save & Next** player cycling, automatic dealer rotation, and **Undo Last Round** support.
-- **Live Standings & Endgame Alerts:** Tracks progress bars toward **200 points**, highlights players in the **170+ endgame zone**, and crowns the winner automatically.
+- **Custom Goal Setting:** Set a custom target score before or during play so the game can end at your preferred threshold instead of the default **200 points**.
+- **Live Standings & Endgame Alerts:** Tracks progress bars toward your goal, highlights players in the endgame zone, and crowns the winner automatically.
 - **Offline & Installable (PWA):** Includes a Web App Manifest and Service Worker so you can install it directly onto an iOS or Android home screen and play offline.
 - **Auto-Save:** Automatically saves your ongoing game state to `localStorage` so accidental refreshes never lose your scores.
 
